@@ -1,0 +1,31 @@
+camera:
+  serial: null
+  width: 1280
+  height: 720
+  fps: 30
+  max_depth_m: 1.0
+  warmup_frames: 30
+
+board:
+  # User's existing ChArUco board.
+  squares_x: 5
+  squares_y: 7
+  square_length_m: 0.037
+  marker_length_m: 0.0235
+  dictionary: DICT_5X5_50
+  min_corners: 8
+  max_reprojection_error_px: 2.0
+
+object:
+  # Object sits directly on the board. Height is measured away from board,
+  # toward the camera side (the sign is determined from the estimated pose).
+  min_height_m: 0.006
+  max_height_m: 0.500
+  roi_xy_m: null
+
+reconstruction:
+  voxel_size_m: 0.003
+  sdf_trunc_m: 0.012
+  target_triangles: 3000
+  integrate_color: true
+  simplify: true
