@@ -23,15 +23,12 @@ def create_board(config: dict):
 
 
 class CharucoTracker:
-    """Detect the board and estimate T_camera_board for each color frame."""
+    """Detect ChArUco automatically and estimate T_camera_board."""
 
     def __init__(self, config: dict, camera_matrix: np.ndarray, distortion: np.ndarray):
         aruco = cv2.aruco
         self.dictionary, self.board = create_board(config)
-        self.detector = aruco.ArucoDetector(
-            self.dictionary,
-            aruco.DetectorParameters(),
-        )
+        self.detector = aruco.CharucoDetector(self.board)
         self.K = np.asarray(camera_matrix, dtype=np.float64)
         self.dist = np.asarray(distortion, dtype=np.float64)
         self.min_corners = int(config.get("min_corners", 8))
@@ -39,51 +36,51 @@ class CharucoTracker:
 
     def estimate(self, bgr: np.ndarray):
         gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-        marker_corners, marker_ids, _ = self.detector.detectMarkers(gray)
-
-        if marker_ids is None:
-            return None, {"reason": "no markers", "markers": 0, "corners": 0}, bgr
-
-        count, corners, ids = cv2.aruco.interpolateCornersCharuco(
-            marker_corners,
-            marker_ids,
-            gray,
-            self.board,
-            cameraMatrix=self.K,
-            distCoeffs=self.dist,
-        )
+        corners, ids, marker_corners, marker_ids = self.detector.detectBoard(gray)
 
         preview = bgr.copy()
-        cv2.aruco.drawDetectedMarkers(preview, marker_corners, marker_ids)
+        marker_count = 0 if marker_ids is None else len(marker_ids)
+        if marker_ids is not None:
+            cv2.aruco.drawDetectedMarkers(preview, marker_corners, marker_ids)
 
-        if corners is None or int(count) < self.min_corners:
+        corner_count = 0 if ids is None else len(ids)
+        if corners is None or ids is None or corner_count < self.min_corners:
             return None, {
                 "reason": "not enough ChArUco corners",
-                "markers": len(marker_ids),
-                "corners": int(count or 0),
+                "markers": marker_count,
+                "corners": corner_count,
             }, preview
 
         cv2.aruco.drawDetectedCornersCharuco(preview, corners, ids)
-        ok, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
-            corners, ids, self.board, self.K, self.dist, None, None
+        object_points = self.board.getChessboardCorners()[
+            ids.flatten().astype(int)
+        ].astype(np.float64)
+        image_points = corners.reshape(-1, 2).astype(np.float64)
+
+        ok, rvec, tvec = cv2.solvePnP(
+            object_points,
+            image_points,
+            self.K,
+            self.dist,
+            flags=cv2.SOLVEPNP_ITERATIVE,
         )
         if not ok:
             return None, {
-                "reason": "pose estimation failed",
-                "markers": len(marker_ids),
-                "corners": int(count),
+                "reason": "solvePnP failed",
+                "markers": marker_count,
+                "corners": corner_count,
             }, preview
 
-        board_corners = self.board.getChessboardCorners()
-        object_points = board_corners[ids.flatten().astype(int)].astype(np.float64)
-        projected, _ = cv2.projectPoints(object_points, rvec, tvec, self.K, self.dist)
-        observed = corners.reshape(-1, 2)
+        projected, _ = cv2.projectPoints(
+            object_points, rvec, tvec, self.K, self.dist
+        )
         projected = projected.reshape(-1, 2)
-        error = float(np.sqrt(np.mean(np.sum((observed - projected) ** 2, axis=1))))
-
+        error = float(
+            np.sqrt(np.mean(np.sum((image_points - projected) ** 2, axis=1)))
+        )
         status = {
-            "markers": len(marker_ids),
-            "corners": int(count),
+            "markers": marker_count,
+            "corners": corner_count,
             "reprojection_error_px": error,
         }
         if error > self.max_error:
@@ -101,15 +98,13 @@ class CharucoTracker:
 
 
 def save_board_image(config: dict, output: str, pixels_per_square: int = 400) -> None:
-    """Generate a board image with a 5:7 layout ratio; print at measured 1:1 size."""
+    """Generate the configured board image without adding a print margin."""
     _, board = create_board(config)
     width = int(config["squares_x"]) * pixels_per_square
     height = int(config["squares_y"]) * pixels_per_square
     image = board.generateImage((width, height), marginSize=0, borderBits=1)
     if not cv2.imwrite(output, image):
         raise OSError(f"Could not write board image: {output}")
-    print(
-        f"Saved {output}. Print the chessboard area at "
-        f"{config['squares_x'] * config['square_length_m'] * 1000:.0f} x "
-        f"{config['squares_y'] * config['square_length_m'] * 1000:.0f} mm."
-    )
+    width_mm = config["squares_x"] * config["square_length_m"] * 1000
+    height_mm = config["squares_y"] * config["square_length_m"] * 1000
+    print(f"Saved {output}. Print the board at {width_mm:.0f} x {height_mm:.0f} mm.")
