@@ -51,6 +51,7 @@ scan_quality:
   azimuth_bins: 8
   min_azimuth_bins: 4
   max_mean_reprojection_error_px: 2.0
+  min_object_pixels: 100
 
 reconstruction:
   voxel_size_m: 0.003
