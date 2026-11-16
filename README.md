@@ -142,6 +142,15 @@ Every reconstruction writes:
 - `diagnostics/segmentation_preview.png`: combined preview of several input views.
 - `diagnostics/segmentation_stats.json`: per-frame retained pixel counts.
 - `diagnostics/outlier_stats.json`: rejected depth pixel counts by filter.
+- `diagnostics/segmented_points_board.ply`: voxel-downsampled segmented points transformed into board coordinates. This is saved before TSDF mesh extraction and is useful for checking pose consistency and segmentation geometry.
+
+If TSDF extraction fails or produces an empty mesh, reconstruction now still writes `report.json` with status, failure reason, scan-quality metrics, segmentation totals, settings and point-cloud bounds. It also saves `reconstruction_config.yaml`. Inspect the point cloud in Open3D before recapturing:
+
+```bash
+uv run python -c "import open3d as o3d; p=o3d.io.read_point_cloud('outputs/scan01/diagnostics/segmented_points_board.ply'); o3d.visualization.draw_geometries([p])"
+```
+
+A compact, roughly spherical cloud around the object indicates that segmentation and board-pose transforms are broadly consistent; a stretched, duplicated or widely scattered cloud indicates pose/depth alignment problems.
 
 ### Scan quality
 
