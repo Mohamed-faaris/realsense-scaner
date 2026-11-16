@@ -43,7 +43,7 @@ class CharucoTracker:
         if marker_ids is not None:
             cv2.aruco.drawDetectedMarkers(preview, marker_corners, marker_ids)
 
-        corner_count = 0 if ids is None else len(ids)
+        corner_count = 0 if corners is None else len(corners)
         if corners is None or ids is None or corner_count < self.min_corners:
             return None, {
                 "reason": "not enough ChArUco corners",
@@ -51,11 +51,36 @@ class CharucoTracker:
                 "corners": corner_count,
             }, preview
 
-        cv2.aruco.drawDetectedCornersCharuco(preview, corners, ids)
-        object_points = self.board.getChessboardCorners()[
-            ids.flatten().astype(int)
-        ].astype(np.float64)
-        image_points = corners.reshape(-1, 2).astype(np.float64)
+        # OpenCV 5 may return corner and ID arrays with inconsistent lengths
+        # for a partially detected board. Normalize and validate before drawing
+        # or passing correspondences to solvePnP.
+        charuco_corners = np.asarray(corners, dtype=np.float32).reshape(-1, 2)
+        charuco_ids = np.asarray(ids, dtype=np.int32).reshape(-1)
+        if len(charuco_corners) != len(charuco_ids):
+            return None, {
+                "reason": "ChArUco corner/ID count mismatch",
+                "markers": marker_count,
+                "corners": len(charuco_corners),
+                "corner_ids": len(charuco_ids),
+            }, preview
+
+        board_corners = self.board.getChessboardCorners()
+        valid_ids = (charuco_ids >= 0) & (charuco_ids < len(board_corners))
+        if not np.all(valid_ids):
+            return None, {
+                "reason": "ChArUco returned invalid corner IDs",
+                "markers": marker_count,
+                "corners": len(charuco_corners),
+            }, preview
+
+        corner_count = len(charuco_ids)
+        cv2.aruco.drawDetectedCornersCharuco(
+            preview,
+            charuco_corners.reshape(-1, 1, 2),
+            charuco_ids.reshape(-1, 1),
+        )
+        object_points = board_corners[charuco_ids].astype(np.float64)
+        image_points = charuco_corners.astype(np.float64)
 
         ok, rvec, tvec = cv2.solvePnP(
             object_points,
