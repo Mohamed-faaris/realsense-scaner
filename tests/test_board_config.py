@@ -36,6 +36,9 @@ def test_outlier_removal_is_enabled_and_depth_range_is_configured():
 
     assert config["outlier_removal"]["enabled"] is True
     assert config["outlier_removal"]["median"]["enabled"] is True
+    assert config["outlier_removal"]["statistical"]["enabled"] is True
+    assert config["outlier_removal"]["statistical"]["nb_neighbors"] == 20
+    assert config["outlier_removal"]["statistical"]["std_ratio"] == 2.0
     assert config["camera"]["min_depth_m"] > 0
     assert config["camera"]["max_depth_m"] > config["camera"]["min_depth_m"]
 
