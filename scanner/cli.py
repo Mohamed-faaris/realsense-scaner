@@ -53,6 +53,11 @@ def main() -> None:
     reconstruct_cmd.add_argument("--dataset", default="datasets/scan01")
     reconstruct_cmd.add_argument("--output", default="outputs/scan01")
     reconstruct_cmd.add_argument("--no-view", action="store_true")
+    reconstruct_cmd.add_argument(
+        "--no-outlier-removal",
+        action="store_true",
+        help="Disable configured median/statistical depth outlier rejection for this run",
+    )
 
     visualize_cmd = commands.add_parser(
         "visualize", help="Render configured mesh angles and a combined contact sheet"
@@ -79,6 +84,8 @@ def main() -> None:
     elif args.command == "replay-bag":
         replay_bag(args.bag, args.output, config)
     elif args.command == "reconstruct":
+        if args.no_outlier_removal:
+            config.setdefault("outlier_removal", {})["enabled"] = False
         reconstruct(args.dataset, args.output, config, show=not args.no_view)
     elif args.command == "visualize":
         visualize_mesh(args.mesh, args.output, config)
