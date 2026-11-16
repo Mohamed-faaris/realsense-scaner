@@ -104,7 +104,7 @@ The segmentation assumes **one target object on the board**:
 2. Transform remaining points into ChArUco board coordinates.
 3. Keep points above `object.min_height_m` and inside board bounds.
 4. Remove isolated depth spikes using the configurable median filter.
-5. Optionally apply 3D statistical outlier removal.
+5. Apply 3D statistical outlier removal (enabled by default) to reject spatially isolated points.
 6. Integrate accepted depth frames using TSDF.
 
 To disable outlier removal for one reconstruction:
@@ -114,7 +114,21 @@ uv run rs-scan reconstruct --dataset datasets/scan01 \
   --output outputs/no_filter --no-outlier-removal
 ```
 
-The default median filter uses a 3×3 neighborhood and rejects local depth deviations over 20 mm. Optional statistical filtering is available in YAML, but can be more expensive and may remove sparse true geometry.
+The default median filter uses a 3×3 neighborhood and rejects local depth deviations over 20 mm. **3D statistical outlier removal is also enabled by default** with 20 neighbors and a 2.0 standard-deviation ratio. It converts the remaining object depth pixels into XYZ points, removes spatially isolated points, and masks those pixels before TSDF fusion. Statistical filtering can remove legitimate sparse details, so compare the segmentation previews and `diagnostics/outlier_stats.json` before tightening its settings.
+
+Tune it in YAML:
+
+```yaml
+outlier_removal:
+  enabled: true
+  statistical:
+    enabled: true
+    nb_neighbors: 20
+    std_ratio: 2.0
+    min_points: 100
+```
+
+Increase `std_ratio` to preserve more points; decrease it to reject more outliers. Increase `nb_neighbors` for a broader neighborhood test. These values depend on point density and camera distance.
 
 **Near-range warning:** software cannot correct depth measurements made inside the camera's unreliable minimum range. Points closer than `camera.min_depth_m` are rejected; increase camera-to-object distance or tune the threshold after testing the D415 at your actual working distance.
 
@@ -176,7 +190,7 @@ Without `--target-triangles`, the target comes from `decimation.target_triangles
 All settings live in `config/scanner.yaml`:
 
 - `camera.min_depth_m`: reject too-near measurements.
-- `outlier_removal`: median and optional statistical filtering.
+- `outlier_removal`: median and 3D statistical filtering (both enabled by default).
 - `segmentation_preview`: enable previews and set number of saved frames.
 - `scan_quality`: minimum frame count, view coverage and tracking thresholds.
 - `mesh_cleanup`: remove tiny components and optionally smooth.
