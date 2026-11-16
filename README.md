@@ -68,7 +68,7 @@ This records a complete session:
 
 Valid RGB-D views are sampled at `capture.record_sample_hz` (default 5 Hz). SPACE forces an additional sample. MP4 continues recording if tracking is lost, but those frames are not accepted for reconstruction.
 
-**MP4 is not a metric 3D source.** It has no depth. Keep the `.bag` file to reprocess the original depth and color later.
+**MP4 is not a metric 3D source.** It has no depth. Keep the `.db3` file to reprocess the original depth and color later.
 
 ## Reprocess a recording (camera not required)
 
