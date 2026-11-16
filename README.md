@@ -59,7 +59,7 @@ uv run rs-scan capture --output datasets/scan01 --record-video
 
 This records a complete session:
 
-- `recording.bag`: raw synchronized RealSense color + depth streams; the reusable 3D source.
+- `recording.db3`: raw synchronized RealSense color + depth streams in the current ROS 2 rosbag2 format; the reusable 3D source.
 - `recording.mp4`: continuous RGB review video.
 - `color/*.png`: RGB samples.
 - `depth/*.png`: aligned 16-bit depth samples.
@@ -72,11 +72,11 @@ Valid RGB-D views are sampled at `capture.record_sample_hz` (default 5 Hz). SPAC
 
 ## Reprocess a recording (camera not required)
 
-Re-run ChArUco detection with the bag file:
+Re-run ChArUco detection with the DB3 recording:
 
 ```bash
 uv run rs-scan replay-bag \
-  --bag datasets/scan01/recording.bag \
+  --bag datasets/scan01/recording.db3 \
   --output datasets/scan01_reprocessed
 ```
 
@@ -88,7 +88,7 @@ uv run rs-scan reconstruct \
   --output outputs/scan01
 ```
 
-The RealSense bag stores synchronized streams and can be replayed using librealsense. The physical D415 is not required for replay or reconstruction.
+The RealSense DB3 recording stores synchronized streams in the ROS 2 rosbag2 format and can be replayed using librealsense. The physical D415 is not required for replay or reconstruction.
 
 ## Reconstruction, previews and outlier filtering
 
