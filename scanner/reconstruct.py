@@ -151,6 +151,7 @@ def reconstruct(dataset: str, output: str, config: dict, show: bool = True) -> N
     preview_limit = max(0, int(preview_config.get("max_frames", 12)))
     outlier_stats = []
     segmentation_stats = []
+    diagnostic_points_board = []
     integrated = 0
     skipped_empty = 0
 
@@ -197,6 +198,18 @@ def reconstruct(dataset: str, output: str, config: dict, show: bool = True) -> N
                 float(config["camera"]["max_depth_m"]),
             )
             previews.append(overlay)
+
+        # Independently accumulate the segmented samples in board coordinates.
+        # This diagnostic cloud lets us distinguish bad segmentation/poses from
+        # a TSDF integration failure when Open3D extracts an empty surface.
+        if kept_pixels:
+            vv, uu = np.nonzero(masked_depth)
+            z_cam = masked_depth[vv, uu].astype(np.float64) * float(metadata["depth_scale_m_per_unit"])
+            x_cam = (uu.astype(np.float64) - float(intr["cx"])) * z_cam / float(intr["fx"])
+            y_cam = (vv.astype(np.float64) - float(intr["cy"])) * z_cam / float(intr["fy"])
+            points_cam = np.column_stack((x_cam, y_cam, z_cam, np.ones_like(z_cam)))
+            points_board = (points_cam @ np.linalg.inv(transform).T)[:, :3]
+            diagnostic_points_board.append(points_board)
 
         if kept_pixels < int(config.get("scan_quality", {}).get("min_object_pixels", 100)):
             skipped_empty += 1
@@ -246,24 +259,84 @@ def reconstruct(dataset: str, output: str, config: dict, show: bool = True) -> N
     for warning in scan_quality["warnings"]:
         print(f"SCAN QUALITY WARNING: {warning}")
 
+    # Save the independently transformed point cloud before attempting mesh
+    # extraction. It is the key artifact for diagnosing pose/TSDF problems.
+    diagnostic_cloud = o3d.geometry.PointCloud()
+    if diagnostic_points_board:
+        all_points = np.concatenate(diagnostic_points_board, axis=0)
+        diagnostic_cloud.points = o3d.utility.Vector3dVector(all_points)
+        diagnostic_cloud = diagnostic_cloud.voxel_down_sample(
+            voxel_size=max(float(reconstruction_config["voxel_size_m"]) * 0.5, 0.001)
+        )
+        o3d.io.write_point_cloud(
+            str(diagnostics_dir / "segmented_points_board.ply"), diagnostic_cloud
+        )
+
+    # Write a useful report even when the TSDF or cleanup stage fails.
+    failure_report = {
+        "status": "failed",
+        "source_dataset": str(source.resolve()),
+        "input_views": len(metadata.get("frames", [])),
+        "integrated_views": integrated,
+        "skipped_views_with_insufficient_object_pixels": skipped_empty,
+        "scan_quality": scan_quality,
+        "segmentation": {
+            "assumption": "single_target_on_board",
+            "method": "board_height_and_bounds",
+            "object_pixels_before_outlier_removal": sum(
+                item["object_pixels_before_outlier_removal"] for item in segmentation_stats
+            ),
+            "object_pixels_after_outlier_removal": sum(
+                item["object_pixels_after_outlier_removal"] for item in segmentation_stats
+            ),
+        },
+        "diagnostics": {
+            "segmented_point_cloud": str((diagnostics_dir / "segmented_points_board.ply").resolve()),
+            "segmented_point_count_after_voxel_downsample": len(diagnostic_cloud.points),
+            "segmented_point_cloud_bounds_m": (
+                diagnostic_cloud.get_axis_aligned_bounding_box().get_extent().tolist()
+                if len(diagnostic_cloud.points) else None
+            ),
+        },
+        "outlier_removal": {
+            "enabled": bool(config.get("outlier_removal", {}).get("enabled", False)),
+            "per_frame": outlier_stats,
+        },
+        "settings": config,
+    }
+
+    def save_failure_report(reason: str) -> None:
+        failure_report["failure_reason"] = reason
+        (destination / "reconstruction_config.yaml").write_text(
+            yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+        )
+        (destination / "report.json").write_text(
+            json.dumps(failure_report, indent=2), encoding="utf-8"
+        )
+
     if integrated == 0:
-        raise RuntimeError(
+        reason = (
             "No frames were integrated. Check the minimum depth, object height, "
             "outlier settings, ChArUco tracking and camera viewpoints."
         )
+        save_failure_report(reason)
+        raise RuntimeError(reason)
 
     mesh = volume.extract_triangle_mesh()
     if len(mesh.triangles) == 0:
-        raise RuntimeError(
-            "No mesh surface was reconstructed. Check object segmentation, near/far depth "
-            "limits, camera viewpoints and whether the object is above the board."
+        reason = (
+            "No TSDF mesh surface was reconstructed. Segmentation diagnostics and "
+            "segmented_points_board.ply were saved; inspect the point cloud to verify "
+            "board-coordinate alignment and pose consistency."
         )
+        save_failure_report(reason)
+        raise RuntimeError(reason)
 
     cleanup_stats = _cleanup_mesh(mesh, config.get("mesh_cleanup", {}))
     if len(mesh.triangles) == 0:
-        raise RuntimeError(
-            "Mesh cleanup removed all triangles. Lower mesh_cleanup.min_component_triangles."
-        )
+        reason = "Mesh cleanup removed all triangles. Lower mesh_cleanup.min_component_triangles."
+        save_failure_report(reason)
+        raise RuntimeError(reason)
 
     before_decimation = {
         "vertices": len(mesh.vertices),
