@@ -3,11 +3,12 @@ camera:
   width: 1280
   height: 720
   fps: 30
+  # Reject invalid measurements outside the chosen reliable working range.
+  min_depth_m: 0.40
   max_depth_m: 1.0
   warmup_frames: 30
 
 board:
-  # Existing physical ChArUco board.
   squares_x: 5
   squares_y: 7
   square_length_m: 0.037
@@ -17,14 +18,39 @@ board:
   max_reprojection_error_px: 2.0
 
 object:
-  # Object sits directly on the board.
+  assumption: single_target_on_board
   min_height_m: 0.006
   max_height_m: 0.500
   roi_xy_m: null
 
 capture:
-  # In --record-video mode, save this many valid RGB-D/pose samples per second.
   record_sample_hz: 5.0
+
+outlier_removal:
+  enabled: true
+  # Median depth deviation rejection removes isolated depth spikes.
+  median:
+    enabled: true
+    kernel_size: 3
+    max_deviation_mm: 20
+  # 3D statistical filtering is optional and can be expensive on dense frames.
+  statistical:
+    enabled: false
+    nb_neighbors: 20
+    std_ratio: 2.0
+    min_points: 100
+
+segmentation_preview:
+  enabled: true
+  max_frames: 12
+  columns: 3
+  depth_visualization_max_m: 1.0
+
+scan_quality:
+  min_frames: 10
+  azimuth_bins: 8
+  min_azimuth_bins: 4
+  max_mean_reprojection_error_px: 2.0
 
 reconstruction:
   voxel_size_m: 0.003
@@ -33,6 +59,14 @@ reconstruction:
   integrate_color: true
   simplify: true
 
+mesh_cleanup:
+  remove_degenerate: true
+  remove_duplicate: true
+  remove_small_components: true
+  min_component_triangles: 30
+  keep_largest_component_only: false
+  smooth_iterations: 0
+
 visualizer:
   width: 800
   height: 600
@@ -40,8 +74,6 @@ visualizer:
   contact_sheet_columns: 2
   show_axes: true
   background_rgba: [0.96, 0.97, 0.98, 1.0]
-  # Azimuth rotates around the mesh Z axis; elevation is above/below the XY plane.
-  # distance is a multiplier relative to the mesh bounds.
   poses:
     - name: front
       azimuth_deg: 0
