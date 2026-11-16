@@ -38,6 +38,7 @@ Thumbs.db
 datasets/
 outputs/
 *.bag
+*.db3
 *.mp4
 *.mkv
 *.avi
