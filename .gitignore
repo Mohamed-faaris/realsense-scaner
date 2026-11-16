@@ -1,8 +1,48 @@
-.venv/
+# Python bytecode and caches
 __pycache__/
+*.py[cod]
+*$py.class
 .pytest_cache/
 .ruff_cache/
-*.py[cod]
+.mypy_cache/
+.pytype/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / build artifacts
 *.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Scanner captures and generated artifacts (keep these out of Git)
 datasets/
 outputs/
+*.bag
+*.mp4
+*.mkv
+*.avi
+
+# Generated calibration board image
+charuco-board.png
+
+# Keep uv.lock tracked for reproducible installs.
