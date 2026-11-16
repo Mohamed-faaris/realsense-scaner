@@ -40,10 +40,10 @@ def main() -> None:
 
     replay_cmd = commands.add_parser(
         "replay-bag",
-        help="Re-detect ChArUco poses and extract RGB-D samples from a recorded .bag",
+        help="Re-detect ChArUco poses and extract RGB-D samples from a recorded RealSense .db3 file",
     )
     replay_cmd.add_argument("--config", default="config/scanner.yaml")
-    replay_cmd.add_argument("--bag", required=True)
+    replay_cmd.add_argument("--bag", required=True, help="Path to RealSense .db3 recording")
     replay_cmd.add_argument("--output", default="datasets/replayed01")
 
     reconstruct_cmd = commands.add_parser(
