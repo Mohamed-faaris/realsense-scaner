@@ -1,22 +1,22 @@
 # RealSense Scaner
 
-A small D415 object-scanning tool. Move the camera around an object placed on a ChArUco board. OpenCV detects the board automatically and estimates camera pose. Open3D fuses RGB-D views into an approximate low-poly mesh.
+A small D415 object-scanning tool. Move the camera around one stationary object placed on a ChArUco board. OpenCV detects the board automatically and estimates camera pose. Open3D fuses RGB-D views into an approximate low-poly mesh.
 
-Python-first: CLI, YAML config, OpenCV preview and Open3D visualization. No web frontend or database.
+Python-first: CLI, YAML configuration, OpenCV preview and Open3D visualization. No frontend framework or database.
 
 ## Stack
 
 - Python 3.11 + `uv`
 - RealSense SDK / `pyrealsense2`
-- OpenCV contrib (automatic ChArUco detection)
-- Open3D (TSDF reconstruction, mesh simplification, rendering)
+- OpenCV contrib for automatic ChArUco detection
+- Open3D for TSDF, point-cloud filtering, mesh cleanup, decimation and rendering
 - YAML configuration
 
 ## Board
 
-Configured for the existing board: 5 × 7 squares, 37 mm squares, 23.5 mm markers, 185 × 259 mm overall, `DICT_5X5_50`, 17 ArUco markers and 24 ChArUco inner corners.
+Configured for the physical board: 5 × 7 squares, 37 mm squares, 23.5 mm markers, 185 × 259 mm overall, `DICT_5X5_50`, 17 ArUco markers and 24 ChArUco inner corners.
 
-Generate the exact configured board image:
+Generate the configured board image:
 
 ```bash
 uv run rs-scan board --output charuco-board.png
@@ -38,7 +38,7 @@ uv sync --extra hardware
 
 If `pyrealsense2` has no compatible wheel for your Python/Ubuntu version, install its binding using the librealsense instructions and run `uv sync`.
 
-## Capture
+## Capture RGB-D
 
 Manual viewpoint capture:
 
@@ -46,33 +46,33 @@ Manual viewpoint capture:
 uv run rs-scan capture --output datasets/scan01
 ```
 
-- Move the camera slowly.
+- Move the camera slowly around the stationary object.
 - Keep at least 8 ChArUco corners visible.
-- Press SPACE to save a valid RGB-D view.
+- Press SPACE to save a valid view.
 - Press Q or ESC to finish.
 
-Continuous recording mode:
+Continuous recording:
 
 ```bash
 uv run rs-scan capture --output datasets/scan01 --record-video
 ```
 
-This saves a complete session directory:
+This records a complete session:
 
-- `recording.bag`: raw synchronized RealSense color + depth streams, timestamps and device stream metadata. This is the **reprocessable source recording**.
-- `recording.mp4`: continuous RGB playback video for quick review.
-- `color/*.png`: RGB frames selected for reconstruction.
-- `depth/*.png`: aligned 16-bit depth frames for the same samples.
-- `poses/*.npy`: ChArUco camera pose for each selected sample.
-- `metadata.json`: intrinsics, depth scale, board settings, timestamps and sample mapping.
+- `recording.bag`: raw synchronized RealSense color + depth streams; the reusable 3D source.
+- `recording.mp4`: continuous RGB review video.
+- `color/*.png`: RGB samples.
+- `depth/*.png`: aligned 16-bit depth samples.
+- `poses/*.npy`: ChArUco camera pose for each accepted sample.
+- `metadata.json`: intrinsics, depth scale, timestamps, board dimensions and sample mapping.
 
-Valid RGB-D samples are saved automatically at `capture.record_sample_hz` (default 5 Hz). SPACE forces an extra sample. MP4 continues recording even when tracking is temporarily lost; invalid-pose frames are not accepted for 3D fusion.
+Valid RGB-D views are sampled at `capture.record_sample_hz` (default 5 Hz). SPACE forces an additional sample. MP4 continues recording if tracking is lost, but those frames are not accepted for reconstruction.
 
-**Do not treat MP4 as the 3D source.** RGB video does not contain metric depth. The RealSense `.bag` preserves the raw depth and color streams required to regenerate reconstruction samples later.
+**MP4 is not a metric 3D source.** It has no depth. Keep the `.bag` file to reprocess the original depth and color later.
 
-## Reprocess a recording later (camera not required)
+## Reprocess a recording (camera not required)
 
-You can re-run board detection using the saved bag file. This is useful if you change the board detector, sampling frequency or pose filtering:
+Re-run ChArUco detection with the bag file:
 
 ```bash
 uv run rs-scan replay-bag \
@@ -80,9 +80,7 @@ uv run rs-scan replay-bag \
   --output datasets/scan01_reprocessed
 ```
 
-This replays the recorded depth and color streams, detects ChArUco poses again, and writes a normal RGB-D dataset.
-
-Reconstruct from either the original capture dataset or the replayed dataset:
+Then reconstruct normally:
 
 ```bash
 uv run rs-scan reconstruct \
@@ -90,11 +88,69 @@ uv run rs-scan reconstruct \
   --output outputs/scan01
 ```
 
-No physical D415 is needed for replay or reconstruction. You only need the saved `.bag` file and the project environment. Librealsense supports recording to and playback from bag files through `enable_record_to_file` and `enable_device_from_file`.
+The RealSense bag stores synchronized streams and can be replayed using librealsense. The physical D415 is not required for replay or reconstruction.
 
-## Render multiple viewpoints into one image
+## Reconstruction, previews and outlier filtering
 
-Configure the camera poses in `visualizer.poses` inside `config/scanner.yaml`. Each entry has a name, azimuth, elevation and distance multiplier.
+```bash
+uv run rs-scan reconstruct \
+  --dataset datasets/scan01 \
+  --output outputs/scan01
+```
+
+The segmentation assumes **one target object on the board**:
+
+1. Reject depth outside `camera.min_depth_m` and `camera.max_depth_m`.
+2. Transform remaining points into ChArUco board coordinates.
+3. Keep points above `object.min_height_m` and inside board bounds.
+4. Remove isolated depth spikes using the configurable median filter.
+5. Optionally apply 3D statistical outlier removal.
+6. Integrate accepted depth frames using TSDF.
+
+To disable outlier removal for one reconstruction:
+
+```bash
+uv run rs-scan reconstruct --dataset datasets/scan01 \
+  --output outputs/no_filter --no-outlier-removal
+```
+
+The default median filter uses a 3×3 neighborhood and rejects local depth deviations over 20 mm. Optional statistical filtering is available in YAML, but can be more expensive and may remove sparse true geometry.
+
+**Near-range warning:** software cannot correct depth measurements made inside the camera's unreliable minimum range. Points closer than `camera.min_depth_m` are rejected; increase camera-to-object distance or tune the threshold after testing the D415 at your actual working distance.
+
+### Segmentation preview
+
+Every reconstruction writes:
+
+- `diagnostics/segmentation/*_mask.png`: retained object pixels (white), rejected outlier pixels (gray).
+- `diagnostics/segmentation/*_overlay.png`: retained object pixels highlighted green and rejected depth outliers red.
+- `diagnostics/segmentation/*_depth.png`: segmented depth visualization.
+- `diagnostics/segmentation_preview.png`: combined preview of several input views.
+- `diagnostics/segmentation_stats.json`: per-frame retained pixel counts.
+- `diagnostics/outlier_stats.json`: rejected depth pixel counts by filter.
+
+### Scan quality
+
+`diagnostics/scan_quality.json` reports valid frames, approximate azimuth-sector coverage, and mean/max ChArUco reprojection error. Warnings identify too few views, limited angular coverage, or poor board tracking. Coverage is a heuristic based on camera positions in board coordinates, not a guarantee of complete surface coverage.
+
+### Mesh cleanup and measurement report
+
+Reconstruction removes degenerate/duplicate triangles and can remove tiny disconnected mesh components. Optional Taubin smoothing is configurable but disabled by default.
+
+`report.json` contains:
+
+- Estimated AABB and oriented bounding-box dimensions in mm.
+- Vertex and triangle counts.
+- Surface area, watertight status and volume when watertight.
+- Segmentation retention and outlier statistics.
+- Scan quality and mesh cleanup results.
+- All settings used for the reconstruction.
+
+The exact configuration is also saved as `reconstruction_config.yaml`, so you can rerun reconstruction from the same dataset or bag after changing parameters.
+
+## Render configured views
+
+Edit `visualizer.poses` in YAML. Each pose specifies azimuth, elevation and distance.
 
 ```bash
 uv run rs-scan visualize \
@@ -102,9 +158,7 @@ uv run rs-scan visualize \
   --output outputs/scan01/views
 ```
 
-Creates individual angle images and one combined `all_views.png` contact sheet with every configured view.
-
-Default views: front, right, rear, left, top and isometric. Rendering uses Open3D OffscreenRenderer; Linux needs a working OpenGL/EGL graphics runtime.
+Creates per-angle PNG files and a combined `all_views.png` contact sheet. Default views: front, right, rear, left, top and isometric. Open3D offscreen rendering needs a working OpenGL/EGL runtime on Linux.
 
 ## Decimate a mesh
 
@@ -115,24 +169,25 @@ uv run rs-scan decimate \
   --target-triangles 1500
 ```
 
-Without `--target-triangles`, the command uses `decimation.target_triangles` from YAML. Quadric-error decimation writes the simplified mesh and a JSON report with before/after vertex and triangle counts. The input is not overwritten unless you explicitly use the same path.
+Without `--target-triangles`, the target comes from `decimation.target_triangles`. Quadric-error decimation writes a simplified mesh and a JSON report with before/after counts. The input is not overwritten unless the same path is explicitly selected.
 
-## Configuration
+## Configuration reference
 
-All parameters live in `config/scanner.yaml`:
+All settings live in `config/scanner.yaml`:
 
-- `board`: physical ChArUco dimensions and detector thresholds.
-- `capture.record_sample_hz`: reconstruction sample rate for recording/replay.
-- `object.min_height_m`: reject the board/background.
-- `reconstruction.voxel_size_m`: TSDF detail versus memory.
-- `visualizer.poses`: desired render angles.
-- `visualizer.contact_sheet_columns`: layout of the combined multi-view image.
-- `decimation.target_triangles`: default low-poly triangle count.
+- `camera.min_depth_m`: reject too-near measurements.
+- `outlier_removal`: median and optional statistical filtering.
+- `segmentation_preview`: enable previews and set number of saved frames.
+- `scan_quality`: minimum frame count, view coverage and tracking thresholds.
+- `mesh_cleanup`: remove tiny components and optionally smooth.
+- `visualizer.poses`: saved image viewpoints.
+- `decimation.target_triangles`: default low-poly budget.
 
 ## Limitations
 
-- The board must remain visible in frames used for reconstruction.
-- Keep the object and board stationary during a recording.
-- The underside is hidden by the board; scanning it requires a second scan and a future scan-merging step.
-- Reflective, transparent, very dark or thin objects can have missing depth.
-- This produces approximate geometry, not metrology-grade CAD.
+- The board must remain visible in frames used for ChArUco pose estimation.
+- Only one target object is assumed; it must fit within the board bounds.
+- Keep the object and board stationary during a scan.
+- The board-contact underside is not observed; a second scan and scan-merging workflow is needed.
+- Reflective, transparent, very dark and thin objects can have missing depth.
+- This is approximate reconstruction, not metrology-grade CAD.
