@@ -33,9 +33,10 @@ outlier_removal:
     enabled: true
     kernel_size: 3
     max_deviation_mm: 20
-  # 3D statistical filtering is optional and can be expensive on dense frames.
+  # 3D statistical filtering rejects points with unusually large neighbor distances.
+  # Enabled by default; disable if scan surfaces become too sparse or processing is slow.
   statistical:
-    enabled: false
+    enabled: true
     nb_neighbors: 20
     std_ratio: 2.0
     min_points: 100
