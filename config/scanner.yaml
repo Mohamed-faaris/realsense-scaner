@@ -7,7 +7,7 @@ camera:
   warmup_frames: 30
 
 board:
-  # User's existing ChArUco board.
+  # Existing physical ChArUco board.
   squares_x: 5
   squares_y: 7
   square_length_m: 0.037
@@ -17,11 +17,14 @@ board:
   max_reprojection_error_px: 2.0
 
 object:
-  # Object sits directly on the board. Height is measured away from board,
-  # toward the camera side (the sign is determined from the estimated pose).
+  # Object sits directly on the board.
   min_height_m: 0.006
   max_height_m: 0.500
   roi_xy_m: null
+
+capture:
+  # In --record-video mode, save this many valid RGB-D/pose samples per second.
+  record_sample_hz: 5.0
 
 reconstruction:
   voxel_size_m: 0.003
@@ -29,3 +32,43 @@ reconstruction:
   target_triangles: 3000
   integrate_color: true
   simplify: true
+
+visualizer:
+  width: 800
+  height: 600
+  fov_deg: 45
+  contact_sheet_columns: 2
+  show_axes: true
+  background_rgba: [0.96, 0.97, 0.98, 1.0]
+  # Azimuth rotates around the mesh Z axis; elevation is above/below the XY plane.
+  # distance is a multiplier relative to the mesh bounds.
+  poses:
+    - name: front
+      azimuth_deg: 0
+      elevation_deg: 12
+      distance: 1.0
+    - name: right
+      azimuth_deg: 90
+      elevation_deg: 12
+      distance: 1.0
+    - name: rear
+      azimuth_deg: 180
+      elevation_deg: 12
+      distance: 1.0
+    - name: left
+      azimuth_deg: 270
+      elevation_deg: 12
+      distance: 1.0
+    - name: top
+      azimuth_deg: 0
+      elevation_deg: 82
+      distance: 1.0
+    - name: isometric
+      azimuth_deg: 45
+      elevation_deg: 32
+      distance: 1.0
+
+decimation:
+  target_triangles: 1500
+  maximum_error: null
+  boundary_weight: 1.0
