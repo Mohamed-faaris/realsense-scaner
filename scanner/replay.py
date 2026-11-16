@@ -9,8 +9,8 @@ import numpy as np
 from scanner.board import CharucoTracker
 
 
-def replay_bag(bag_path: str, output: str, config: dict) -> None:
-    """Re-run ChArUco detection over a recorded RealSense .bag without camera hardware."""
+def replay_bag(recording_path: str, output: str, config: dict) -> None:
+    """Re-run ChArUco detection over a recorded RealSense .db3 file without camera hardware."""
     try:
         import pyrealsense2 as rs
     except ImportError as exc:
@@ -18,7 +18,7 @@ def replay_bag(bag_path: str, output: str, config: dict) -> None:
             "RealSense Python bindings are missing. Run: uv sync --extra hardware"
         ) from exc
 
-    source = Path(bag_path).expanduser().resolve()
+    source = Path(recording_path).expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(source)
 
@@ -72,7 +72,7 @@ def replay_bag(bag_path: str, output: str, config: dict) -> None:
         "board_width_m": config["board"]["squares_x"] * config["board"]["square_length_m"],
         "board_height_m": config["board"]["squares_y"] * config["board"]["square_length_m"],
         "record_video": False,
-        "source_bag": str(source),
+        "source_recording": str(source),
         "frames": [],
     }
 
