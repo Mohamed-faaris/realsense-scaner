@@ -9,6 +9,7 @@ from scanner.board import save_board_image
 from scanner.capture import capture
 from scanner.decimate import decimate_mesh
 from scanner.reconstruct import reconstruct
+from scanner.replay import replay_bag
 from scanner.visualize import visualize_mesh
 
 
@@ -36,6 +37,14 @@ def main() -> None:
         action="store_true",
         help="Save continuous MP4 plus synchronized RGB/depth/pose samples",
     )
+
+    replay_cmd = commands.add_parser(
+        "replay-bag",
+        help="Re-detect ChArUco poses and extract RGB-D samples from a recorded .bag",
+    )
+    replay_cmd.add_argument("--config", default="config/scanner.yaml")
+    replay_cmd.add_argument("--bag", required=True)
+    replay_cmd.add_argument("--output", default="datasets/replayed01")
 
     reconstruct_cmd = commands.add_parser(
         "reconstruct", help="Reconstruct a mesh from a saved RGB-D session"
@@ -67,6 +76,8 @@ def main() -> None:
         save_board_image(config["board"], args.output)
     elif args.command == "capture":
         capture(config, args.output, record_video=args.record_video)
+    elif args.command == "replay-bag":
+        replay_bag(args.bag, args.output, config)
     elif args.command == "reconstruct":
         reconstruct(args.dataset, args.output, config, show=not args.no_view)
     elif args.command == "visualize":
