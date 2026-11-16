@@ -30,6 +30,14 @@ def capture(config: dict, output: str, record_video: bool = False) -> None:
     camera = config["camera"]
     pipeline = rs.pipeline()
     rs_config = rs.config()
+    bag_path = out / "recording.bag" if record_video else None
+    if record_video:
+        if bag_path.exists() or (out / "recording.mp4").exists():
+            raise FileExistsError(
+                f"Recording already exists in {out}. Choose a new --output directory."
+            )
+        # A RealSense bag preserves the raw synchronized depth + color streams.
+        rs_config.enable_record_to_file(str(bag_path))
     if camera.get("serial"):
         rs_config.enable_device(str(camera["serial"]))
     rs_config.enable_stream(
@@ -69,6 +77,7 @@ def capture(config: dict, output: str, record_video: bool = False) -> None:
         "board_width_m": config["board"]["squares_x"] * config["board"]["square_length_m"],
         "board_height_m": config["board"]["squares_y"] * config["board"]["square_length_m"],
         "record_video": bool(record_video),
+        "bag_file": bag_path.name if bag_path else None,
         "video_file": None,
         "frames": [],
     }
@@ -188,7 +197,10 @@ def capture(config: dict, output: str, record_video: bool = False) -> None:
     metadata["saved_frame_count"] = saved
     metadata["video_frame_count"] = video_frame_index
     metadata["video_file"] = video_path.name if video_path else None
+    metadata["bag_file"] = bag_path.name if bag_path else None
     (out / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(f"Saved {saved} reconstructable RGB-D samples to {out.resolve()}")
     if video_path:
         print(f"Continuous review video: {video_path.resolve()}")
+    if bag_path:
+        print(f"Reprocessable raw RGB-D recording: {bag_path.resolve()}")
